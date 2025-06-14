@@ -3,253 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MP3 プレイヤー - PWA</title>
-    <meta name="description" content="高機能なMP3プレイヤーPWAアプリ">
-    <meta name="theme-color" content="#21808D">
-    
-    <!-- PWA Manifest (inline) -->
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTVAz44OX44Os44Kk44Ok44O8Iiwic2hvcnRfbmFtZSI6Ik1QM1BsYXllciIsImRlc2NyaXB0aW9uIjoi6auY5qmf6IO944GqTVAz44OX44Os44Kk44Ok44O844OQPEE85Lit44Oq44OXIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNGQ0ZDRjkiLCJ0aGVtZV9jb2xvciI6IiMyMTgwOEQiLCJpY29ucyI6W3sic3JjIjoiZGF0YTppbWFnZS9zdmcreG1sO2Jhc2U2NCxQSE4yWnlCNGJXeHVjejBpYUhSMGNEb3ZMM2QzZHk1M00yNXZjbWN2TWpBd01DOXpkbWNpSUhacFpYZENiM2c5SWpBZ01DQXlOREFnTWpRd0lqNDhZMmx5WTJ4bElHTjRQU0l4TWpBaUlHTjVQU0l4TWpBaUlISTlJakV3TUNJZ1ptbHNiRDBpSXpJeE9EQTRSQ0lnTHo0OGNHRjBhQ0JrUFNKTk9UQWdPVEJXTVRVd1NETTBNRlk1TUdoNGFpSWdabWxzYkQwaUkxWkdabE5kYVNRcFVJUERRcWlUUkN2OWpaV0FjQjBnSXlveUJmdGdJd2w1SWo0OEwzTjJaejQ9IiwidHlwZSI6ImltYWdlL3N2Zyt4bWwiLCJzaXplcyI6IjI0MHgyNDAifV19">
-    
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMjQwIj48Y2lyY2xlIGN4PSIxMjAiIGN5PSIxMjAiIHI9IjEwMCIgZmlsbD0iIzIxODA4RCIgLz48cGF0aCBkPSJNOTAgOTBWMTUwSDM0MFY5MGgtNjAiIGZpbGw9IiNGQ0ZDRjkiIC8+PC9zdmc+">
-    
+    <title>PWA MP3プレイヤー</title>
+    <meta name="description" content="シンプルで使いやすいPWA対応MP3プレイヤー">
+    <meta name="theme-color" content="#218085">
     <link rel="stylesheet" href="style.css">
-
-    <link rel="manifest" href="manifest.json">
-
-    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-    
-    <meta name="theme-color" content="#00adb5">
-
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="MP3プレイヤー">
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- ヘッダー -->
         <header class="header">
-            <div class="flex items-center justify-between">
-                <div class="logo">
-                    <svg width="32" height="32" viewBox="0 0 32 32">
-                        <circle cx="16" cy="16" r="14" fill="var(--color-primary)" />
-                        <path d="M12 12v8l6-4z" fill="var(--color-btn-primary-text)" />
-                    </svg>
-                    <h1>MP3プレイヤー</h1>
-                </div>
-                <div class="header-controls flex items-center gap-8">
-                    <button class="btn btn--outline btn--sm" id="themeToggle" aria-label="テーマ切替">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="12" r="5" />
-                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                        </svg>
-                    </button>
-                    <button class="btn btn--outline btn--sm" id="installPWA" style="display: none;" aria-label="アプリをインストール">
-                        インストール
-                    </button>
-                </div>
+            <h1>🎵 MP3プレイヤー</h1>
+            <div class="header-controls">
+                <button id="themeToggle" class="btn btn--secondary btn--sm" aria-label="テーマ切り替え" type="button">
+                    🌓
+                </button>
             </div>
         </header>
 
-        <!-- Error Display -->
-        <div id="errorContainer" class="error-container" style="display: none;">
-            <div class="status status--error" id="errorMessage"></div>
-        </div>
-
-        <!-- File Input -->
-        <section class="file-input-section">
+        <!-- ファイル選択セクション -->
+        <section class="file-section">
             <div class="card">
                 <div class="card__body">
-                    <div class="flex flex-col items-center gap-16">
-                        <div class="flex flex-col items-center gap-8">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14,2 14,8 20,8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                                <polyline points="10,9 9,9 8,9" />
-                            </svg>
-                            <p class="text-secondary">MP3ファイルを選択してプレイリストに追加</p>
-                        </div>
-                        <input type="file" id="fileInput" accept="audio/mp3,audio/mpeg" multiple class="hidden">
-                        <button class="btn btn--primary" onclick="document.getElementById('fileInput').click()">
-                            ファイルを選択
-                        </button>
-                    </div>
+                    <h2>音楽ファイルを選択</h2>
+                    <p>対応フォーマット: MP3, FLAC, WAV, OGG, AAC, ALAC(.m4a), Opus, WebM</p>
+                    <input type="file" id="audioFiles" multiple accept="audio/*,.mp3,.flac,.wav,.ogg,.aac,.m4a,.opus,.webm" style="display: none;">
+                    <button id="selectFilesBtn" class="btn btn--primary btn--lg btn--full-width" type="button">
+                        📁 ファイルを選択
+                    </button>
+                    <p style="margin-top: 12px; font-size: 12px; color: var(--color-text-secondary);">
+                        または、ファイルをここにドラッグ&ドロップ
+                    </p>
                 </div>
             </div>
         </section>
 
-        <!-- Player -->
-        <section class="player-section" id="playerSection" style="display: none;">
-            <div class="card player-card">
+        <!-- プレイヤーセクション -->
+        <section id="playerSection" class="player-section hidden">
+            <div class="card">
                 <div class="card__body">
-                    <!-- Now Playing -->
+                    <!-- 現在再生中の情報 -->
                     <div class="now-playing">
-                        <div class="album-art">
-                            <svg width="120" height="120" viewBox="0 0 120 120">
-                                <circle cx="60" cy="60" r="58" fill="var(--color-secondary)" stroke="var(--color-border)" />
-                                <circle cx="60" cy="60" r="20" fill="var(--color-primary)" />
-                                <circle cx="60" cy="60" r="8" fill="var(--color-surface)" />
-                            </svg>
-                        </div>
-                        <div class="track-info">
-                            <h2 id="currentTitle">タイトル未設定</h2>
-                            <p id="currentArtist">アーティスト未設定</p>
-                        </div>
+                        <h3 id="trackTitle">-</h3>
+                        <p id="trackArtist" class="track-artist">-</p>
                     </div>
 
-                    <!-- Progress -->
-                    <div class="progress-section">
-                        <div class="time-display">
-                            <span id="currentTime">0:00</span>
-                            <span id="totalTime">0:00</span>
-                        </div>
-                        <div class="seek-bar">
-                            <input type="range" id="seekSlider" min="0" max="100" value="0" class="slider">
-                        </div>
+                    <!-- シークバー -->
+                    <div class="seek-section">
+                        <span id="currentTime" class="time-display">0:00</span>
+                        <input type="range" id="seekBar" class="seek-bar" min="0" max="100" value="0" aria-label="再生位置">
+                        <span id="duration" class="time-display">0:00</span>
                     </div>
 
-                    <!-- Controls -->
+                    <!-- プレイヤーコントロール -->
                     <div class="player-controls">
-                        <button class="btn btn--outline control-btn" id="shuffleBtn" aria-label="シャッフル">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="16 3 21 3 21 8" />
-                                <path d="M21 3L14 10" />
-                                <polyline points="8 21 3 21 3 16" />
-                                <path d="M3 21L10 14" />
-                                <path d="M21 14L14 21" />
-                                <path d="M3 10L10 3" />
-                            </svg>
-                        </button>
-                        
-                        <button class="btn btn--outline control-btn" id="prevBtn" aria-label="前の曲">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polygon points="19 20 9 12 19 4 19 20" />
-                                <line x1="5" y1="19" x2="5" y2="5" />
-                            </svg>
-                        </button>
-                        
-                        <button class="btn btn--primary control-btn play-pause-btn" id="playPauseBtn" aria-label="再生・一時停止">
-                            <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                <polygon points="5 3 19 12 5 21 5 3" />
-                            </svg>
-                            <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
-                                <rect x="6" y="4" width="4" height="16" />
-                                <rect x="14" y="4" width="4" height="16" />
-                            </svg>
-                        </button>
-                        
-                        <button class="btn btn--outline control-btn" id="nextBtn" aria-label="次の曲">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polygon points="5 4 15 12 5 20 5 4" />
-                                <line x1="19" y1="5" x2="19" y2="19" />
-                            </svg>
-                        </button>
-                        
-                        <button class="btn btn--outline control-btn" id="repeatBtn" aria-label="リピート">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="17 1 21 5 17 9" />
-                                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                                <polyline points="7 23 3 19 7 15" />
-                                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                            </svg>
-                        </button>
+                        <div class="main-controls">
+                            <button id="prevBtn" class="btn btn--secondary control-btn" aria-label="前の曲" type="button">
+                                ⏮️
+                            </button>
+                            <button id="playPauseBtn" class="btn btn--primary control-btn control-btn--large" aria-label="再生/一時停止" type="button">
+                                ▶️
+                            </button>
+                            <button id="nextBtn" class="btn btn--secondary control-btn" aria-label="次の曲" type="button">
+                                ⏭️
+                            </button>
+                        </div>
+
+                        <div class="secondary-controls">
+                            <button id="shuffleBtn" class="btn btn--outline control-btn" aria-label="シャッフル" type="button">
+                                🔀
+                            </button>
+                            <button id="repeatBtn" class="btn btn--outline control-btn" aria-label="リピート" type="button">
+                                🔁
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Volume Control -->
-                    <div class="volume-control">
-                        <button id="muteBtn" class="btn btn--outline control-btn" aria-label="ミュート">
-                            <svg id="volumeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-                            </svg>
+                    <!-- ボリュームコントロール -->
+                    <div class="volume-section">
+                        <button id="muteBtn" class="btn btn--secondary" aria-label="ミュート" type="button">
+                            🔊
                         </button>
-                        <input type="range" id="volumeSlider" min="0" max="100" value="70" class="slider volume-slider">
+                        <input type="range" id="volumeBar" class="volume-bar" min="0" max="100" value="100" aria-label="音量">
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Playlist -->
-        <section class="playlist-section" id="playlistSection" style="display: none;">
+        <!-- プレイリストセクション -->
+        <section id="playlistSection" class="playlist-section hidden">
             <div class="card">
                 <div class="card__header">
-                    <h3>プレイリスト</h3>
-                    <button class="btn btn--outline btn--sm" id="clearPlaylistBtn">
-                        すべて削除
+                    <h3>プレイリスト (<span id="playlistCount">0</span>曲)</h3>
+                    <button id="clearPlaylistBtn" class="btn btn--outline btn--sm" type="button">
+                        🗑️ クリア
                     </button>
                 </div>
                 <div class="card__body">
-                    <div id="playlist" class="playlist"></div>
+                    <div id="playlistContainer" class="playlist-container">
+                        <div class="empty-state">
+                            <h3>プレイリストは空です</h3>
+                            <p>音楽ファイルを追加してください</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
+
+        <!-- 設定セクション -->
+        <section class="settings-section">
+            <div class="card">
+                <div class="card__header">
+                    <h3>設定</h3>
+                </div>
+                <div class="card__body">
+                    <div class="setting-item">
+                        <label class="form-label">テーマ</label>
+                        <select id="themeSelect" class="form-control">
+                            <option value="auto">自動</option>
+                            <option value="light">ライト</option>
+                            <option value="dark">ダーク</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label class="form-label">
+                            <input type="checkbox" id="autoplayNext" checked> 次の曲を自動再生
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- キーボードショートカット情報 -->
+        <section class="shortcuts-section">
+            <div class="card">
+                <div class="card__header">
+                    <h3>⌨️ キーボードショートカット</h3>
+                </div>
+                <div class="card__body">
+                    <div class="shortcuts-grid">
+                        <div class="shortcut-item">
+                            <kbd>Space</kbd>
+                            <span>再生/一時停止</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>←</kbd>
+                            <span>前の曲</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>→</kbd>
+                            <span>次の曲</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>↑</kbd>
+                            <span>音量アップ</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>↓</kbd>
+                            <span>音量ダウン</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>M</kbd>
+                            <span>ミュート切り替え</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ステータス表示 -->
+        <div id="statusMessage" class="status-message hidden"></div>
     </div>
 
-    <!-- Audio Element -->
-    <audio id="audioPlayer" preload="metadata"></audio>
-
-    <!-- Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                const swCode = `
-                    const CACHE_NAME = 'mp3-player-v1';
-                    const urlsToCache = [
-                        '/',
-                        '/style.css',
-                        '/app.js'
-                    ];
-
-                    self.addEventListener('install', event => {
-                        event.waitUntil(
-                            caches.open(CACHE_NAME)
-                                .then(cache => cache.addAll(urlsToCache))
-                        );
-                    });
-
-                    self.addEventListener('fetch', event => {
-                        event.respondWith(
-                            caches.match(event.request)
-                                .then(response => {
-                                    if (response) {
-                                        return response;
-                                    }
-                                    return fetch(event.request);
-                                }
-                            )
-                        );
-                    });
-                `;
-                
-                const blob = new Blob([swCode], { type: 'application/javascript' });
-                const swUrl = URL.createObjectURL(blob);
-                
-                navigator.serviceWorker.register(swUrl)
-                    .then(registration => {
-                        console.log('Service Worker registered successfully');
-                    })
-                    .catch(error => {
-                        console.log('Service Worker registration failed');
-                    });
-            });
-        }
-
-        // PWA Install prompt
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            document.getElementById('installPWA').style.display = 'block';
-        });
-
-        document.getElementById('installPWA').addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                deferredPrompt = null;
-                document.getElementById('installPWA').style.display = 'none';
-            }
-        });
-    </script>
+    <!-- 隠された音声要素 -->
+    <audio id="audioPlayer" preload="none" controls style="display: none;"></audio>
 
     <script src="app.js"></script>
 </body>
