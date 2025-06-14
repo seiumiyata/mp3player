@@ -714,3 +714,15 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded - Initializing MP3Player');
     window.player = new MP3Player();
 });
+
+// Service Worker の登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('./sw.js');
+      console.log('ServiceWorker registration successful:', registration.scope);
+    } catch (error) {
+      console.error('ServiceWorker registration failed:', error);
+    }
+  });
+}
