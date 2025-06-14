@@ -1,23 +1,142 @@
 {
-  "short_name": "MP3Player",
   "name": "PWA MP3プレイヤー",
-  "description": "シンプルで使いやすいPWA対応MP3プレイヤー",
+  "short_name": "MP3Player",
+  "description": "オフライン対応のシンプルで使いやすいMP3プレイヤー。FLAC、WAV、AAC、ALAC等の高音質フォーマットにも対応",
+  "version": "2.0.0",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#00adb5",
+  "background_color": "#222831",
+  "lang": "ja",
+  "dir": "ltr",
+  
+  "categories": ["music", "entertainment", "multimedia"],
+  
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "./icons/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "./icons/icon-512.png",
+      "type": "image/png", 
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512", 
+      "purpose": "maskable"
     }
   ],
-  "start_url": "./index.html",
-  "scope": "./",
-  "background_color": "#222831",
-  "theme_color": "#00adb5",
-  "display": "standalone",
-  "orientation": "portrait"
+  
+  "shortcuts": [
+    {
+      "name": "音楽を追加",
+      "short_name": "追加",
+      "description": "新しい音楽ファイルをプレイリストに追加",
+      "url": "./index.html?action=add-music",
+      "icons": [
+        {
+          "src": "./icons/add-music-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "プレイリスト",
+      "short_name": "リスト",
+      "description": "保存済みのプレイリストを表示",
+      "url": "./index.html?action=playlist",
+      "icons": [
+        {
+          "src": "./icons/playlist-192.png", 
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+
+  "screenshots": [
+    {
+      "src": "./screenshots/mobile-player.png",
+      "type": "image/png",
+      "sizes": "375x812",
+      "form_factor": "narrow",
+      "label": "モバイル版プレイヤー画面"
+    },
+    {
+      "src": "./screenshots/desktop-player.png", 
+      "type": "image/png",
+      "sizes": "1280x720",
+      "form_factor": "wide",
+      "label": "デスクトップ版プレイヤー画面"
+    }
+  ],
+  
+  "file_handlers": [
+    {
+      "action": "./index.html?file-handler",
+      "accept": {
+        "audio/mpeg": [".mp3"],
+        "audio/mp4": [".m4a", ".mp4"],
+        "audio/flac": [".flac"],
+        "audio/wav": [".wav"],
+        "audio/ogg": [".ogg"],
+        "audio/aac": [".aac"],
+        "audio/opus": [".opus"],
+        "audio/webm": [".webm"]
+      }
+    }
+  ],
+
+  "protocol_handlers": [
+    {
+      "protocol": "web+music",
+      "url": "./index.html?play=%s"
+    }
+  ],
+
+  "prefer_related_applications": false,
+  
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://your-domain.com/pwa-mp3-player/"
+    }
+  ],
+
+  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
+  
+  "edge_side_panel": {
+    "preferred_width": 420
+  },
+
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+
+  "handle_links": "preferred",
+  
+  "capture_links": "existing-client-navigate",
+
+  "display_override": [
+    "window-controls-overlay",
+    "standalone", 
+    "minimal-ui",
+    "browser"
+  ],
+
+  "id": "/?source=pwa-install",
+
+  "note_taking": {
+    "new_note_url": "./index.html?action=new-playlist"
+  }
 }
