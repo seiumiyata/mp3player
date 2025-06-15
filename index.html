@@ -123,6 +123,17 @@
                 </div>
             </div>
         </section>
+        
+        <!-- プレイリスト保存・読み込みボタン -->
+        <div class="playlist-actions" style="margin: 16px 0;">
+            <button id="exportPlaylistBtn" class="btn btn--primary btn--sm" type="button">
+                💾 プレイリストを名前をつけて保存
+            </button>
+            <input type="file" id="importPlaylistInput" accept="application/json" style="display:none;">
+            <button id="importPlaylistBtn" class="btn btn--secondary btn--sm" type="button">
+                📂 プレイリストを読み込む
+            </button>
+        </div>
 
         <!-- 設定セクション -->
         <section class="settings-section">
