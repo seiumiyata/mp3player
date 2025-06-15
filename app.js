@@ -18,60 +18,112 @@ class MP3Player {
         ];
         
         this.init();
+    savePlaylistAuto() {
+        const playlistMeta = this.playlist.map(track => ({
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            fileName: track.file ? track.file.name : null
+        }));
+        localStorage.setItem('mp3player_playlist', JSON.stringify(playlistMeta));
+    }
+
+    loadPlaylistAuto() {
+        const data = localStorage.getItem('mp3player_playlist');
+        return data ? JSON.parse(data) : [];
+    }
+
+    exportPlaylist(filename = 'playlist.json') {
+        const data = JSON.stringify(this.playlist.map(track => ({
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            fileName: track.file ? track.file.name : null
+        })), null, 2);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    importPlaylist(file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+            const tracks = JSON.parse(e.target.result);
+            this.playlist = tracks.map(meta => ({
+                ...meta,
+                url: '',
+                file: null,
+                blob: null
+            }));
+            this.renderPlaylist();
+            this.showPlayer();
+            this.savePlaylistAuto();
+            } catch (err) {
+            this.showStatus('プレイリストファイルが不正です', 'error');
+            }
+        };
+        reader.readAsText(file);
+    }
+
     }
     
     savePlaylistAuto() {
-  // ファイル本体は保存できないので、メタデータのみ保存
-  const playlistMeta = this.playlist.map(track => ({
-    title: track.title,
-    artist: track.artist,
-    duration: track.duration,
-    fileName: track.file ? track.file.name : null
-  }));
-  localStorage.setItem('mp3player_playlist', JSON.stringify(playlistMeta));
-}
-
-loadPlaylistAuto() {
-  const data = localStorage.getItem('mp3player_playlist');
-  return data ? JSON.parse(data) : [];
-}
-
-exportPlaylist(filename = 'playlist.json') {
-  const data = JSON.stringify(this.playlist.map(track => ({
-    title: track.title,
-    artist: track.artist,
-    duration: track.duration,
-    fileName: track.file ? track.file.name : null
-  })), null, 2);
-  const blob = new Blob([data], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-importPlaylist(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const tracks = JSON.parse(e.target.result);
-      this.playlist= tracks.map(meta => ({
-        ...meta,
-        url: '', // ファイル本体は再選択してもらう
-        file: null,
-        blob: null
-      }));
-      this.updateOriginalOrder();
-      this.renderPlaylist();
-      this.showPlayer();
-      this.savePlaylistAuto();
-    } catch (err) {
-      this.showError('プレイリストファイルが不正です');
+        const playlistMeta = this.playlist.map(track => ({
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            fileName: track.file ? track.file.name : null
+        }));
+        localStorage.setItem('mp3player_playlist', JSON.stringify(playlistMeta));
     }
-  };
-  reader.readAsText(file);
+
+    loadPlaylistAuto() {
+        const data = localStorage.getItem('mp3player_playlist');
+        return data ? JSON.parse(data) : [];
+    }
+
+    exportPlaylist(filename = 'playlist.json') {
+        const data = JSON.stringify(this.playlist.map(track => ({
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration,
+            fileName: track.file ? track.file.name : null
+        })), null, 2);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    importPlaylist(file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+            const tracks = JSON.parse(e.target.result);
+            this.playlist = tracks.map(meta => ({
+                ...meta,
+                url: '', // ファイル本体は再選択してもらう
+                file: null,
+                blob: null
+            }));
+            this.renderPlaylist();
+            this.showPlayer();
+            this.savePlaylistAuto();
+            } catch (err) {
+            this.showStatus('プレイリストファイルが不正です', 'error');
+            }
+    };
+
+    reader.readAsText(file);
+
 }
 
     init() {
@@ -300,6 +352,7 @@ importPlaylist(file) {
         this.playlist.push(track);
         this.renderPlaylist();
         this.updatePlaylistCount();
+        this.savePlaylistAuto(); // ← ここを追加
     }
     
     updatePlaylistCount() {
@@ -353,6 +406,10 @@ importPlaylist(file) {
     removeFromPlaylist(index) {
         if (index === this.currentTrackIndex && this.isPlaying) {
             this.pause();
+
+            this.renderPlaylist();
+            this.updatePlaylistCount();
+            this.savePlaylistAuto(); // ← ここを追加
         }
         
         // URLを解放
@@ -384,6 +441,9 @@ importPlaylist(file) {
     clearPlaylist() {
         if (this.isPlaying) {
             this.pause();
+            this.hidePlayer();
+            this.showStatus('プレイリストをクリアしました', 'success');
+            this.savePlaylistAuto(); // ← ここを追加
         }
         
         // 全URLを解放
