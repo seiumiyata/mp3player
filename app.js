@@ -22,7 +22,7 @@ class MP3Player {
     
     savePlaylistAuto() {
   // ファイル本体は保存できないので、メタデータのみ保存
-  const playlistMeta = this.tracks.map(track => ({
+  const playlistMeta = this.playlist.map(track => ({
     title: track.title,
     artist: track.artist,
     duration: track.duration,
@@ -37,7 +37,7 @@ loadPlaylistAuto() {
 }
 
 exportPlaylist(filename = 'playlist.json') {
-  const data = JSON.stringify(this.tracks.map(track => ({
+  const data = JSON.stringify(this.playlist.map(track => ({
     title: track.title,
     artist: track.artist,
     duration: track.duration,
@@ -57,7 +57,7 @@ importPlaylist(file) {
   reader.onload = e => {
     try {
       const tracks = JSON.parse(e.target.result);
-      this.tracks = tracks.map(meta => ({
+      this.playlist= tracks.map(meta => ({
         ...meta,
         url: '', // ファイル本体は再選択してもらう
         file: null,
