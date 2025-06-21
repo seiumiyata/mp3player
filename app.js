@@ -1,842 +1,1415 @@
+/**
+ * 高機能 MP3 プレイヤー
+ * 機能：再生制御、プレイリスト管理、永続化、シャッフル、リピート
+ */
+
+// アプリケーション設定
+const APP_CONFIG = {
+  supportedFormats: ["audio/mpeg", "audio/mp3", "audio/flac", "audio/x-flac", "audio/wav", "audio/x-wav", "audio/ogg", "audio/x-ogg", "audio/aac", "audio/mp4", "audio/webm", "audio/opus"],
+  fileExtensions: [".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".opus", ".webm"],
+  defaultSettings: {
+    theme: "auto",
+    autoplayNext: true,
+    volume: 1,
+    repeatMode: "none",
+    shuffle: false
+  },
+  storageKeys: {
+    settings: "mp3player_settings",
+    playlists: "mp3player_playlists",
+    currentPlaylist: "mp3player_current_playlist",
+    playbackState: "mp3player_playback_state"
+  }
+};
+
+/**
+ * MP3プレイヤークラス
+ * 音楽再生とプレイリスト管理を担当
+ */
 class MP3Player {
-    constructor() {
-        this.audio = document.getElementById('audioPlayer');
-        this.playlist = [];
-        this.currentTrackIndex = 0;
-        this.isPlaying = false;
-        this.isShuffle = false;
-        this.repeatMode = 'none'; // none, one, all
-        this.volume = 1;
-        this.isMuted = false;
-        this.theme = 'auto';
-        this.autoplayNext = true;
-        
-        this.supportedTypes = [
-            'audio/mpeg', 'audio/mp3', 'audio/flac', 'audio/x-flac',
-            'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/x-ogg',
-            'audio/aac', 'audio/mp4', 'audio/webm', 'audio/opus'
-        ];
-        
-        this.init();
-    savePlaylistAuto() {
-        const playlistMeta = this.playlist.map(track => ({
-            title: track.title,
-            artist: track.artist,
-            duration: track.duration,
-            fileName: track.file ? track.file.name : null
-        }));
-        localStorage.setItem('mp3player_playlist', JSON.stringify(playlistMeta));
-    }
+  constructor() {
+    this.initDOMElements();
+    this.initPlayerState();
+    this.init();
+  }
 
-    loadPlaylistAuto() {
-        const data = localStorage.getItem('mp3player_playlist');
-        return data ? JSON.parse(data) : [];
-    }
+  /**
+   * DOM要素の初期化
+   */
+  initDOMElements() {
+    // DOM要素
+    this.audioElement = document.getElementById('audio-player');
+    this.playBtn = document.getElementById('play-btn');
+    this.playIcon = document.getElementById('play-icon');
+    this.pauseIcon = document.getElementById('pause-icon');
+    this.prevBtn = document.getElementById('prev-btn');
+    this.nextBtn = document.getElementById('next-btn');
+    this.shuffleBtn = document.getElementById('shuffle-btn');
+    this.repeatBtn = document.getElementById('repeat-btn');
+    this.muteBtn = document.getElementById('mute-btn');
+    this.volumeIcon = document.getElementById('volume-icon');
+    this.muteIcon = document.getElementById('mute-icon');
+    this.volumeSlider = document.getElementById('volume-slider');
+    this.seekBar = document.getElementById('seek-bar');
+    this.currentTimeDisplay = document.getElementById('current-time');
+    this.durationDisplay = document.getElementById('duration');
+    this.currentTrackTitle = document.getElementById('current-track-title');
+    this.currentTrackArtist = document.getElementById('current-track-artist');
+    this.playlistItems = document.getElementById('playlist-items');
+    this.playlistSelect = document.getElementById('playlist-select');
+    this.fileInput = document.getElementById('file-input');
+    this.fileSelectBtn = document.getElementById('file-select-btn');
+    this.dropArea = document.getElementById('drop-area');
+    this.themeToggle = document.getElementById('theme-toggle');
+    this.createPlaylistBtn = document.getElementById('create-playlist-btn');
+    this.renamePlaylistBtn = document.getElementById('rename-playlist-btn');
+    this.deletePlaylistBtn = document.getElementById('delete-playlist-btn');
+    this.exportPlaylistBtn = document.getElementById('export-playlist-btn');
+    this.importPlaylistBtn = document.getElementById('import-playlist-btn');
+    this.importFileInput = document.getElementById('import-file-input');
+    this.playlistDialog = document.getElementById('playlist-dialog');
+    this.dialogTitle = document.getElementById('dialog-title');
+    this.playlistNameInput = document.getElementById('playlist-name');
+    this.dialogCancel = document.getElementById('dialog-cancel');
+    this.dialogConfirm = document.getElementById('dialog-confirm');
+  }
 
-    exportPlaylist(filename = 'playlist.json') {
-        const data = JSON.stringify(this.playlist.map(track => ({
-            title: track.title,
-            artist: track.artist,
-            duration: track.duration,
-            fileName: track.file ? track.file.name : null
-        })), null, 2);
-        const blob = new Blob([data], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
+  /**
+   * プレイヤーの状態の初期化
+   */
+  initPlayerState() {
+    // プレイヤーの状態
+    this.playlists = {}; // 複数プレイリスト格納用オブジェクト
+    this.currentPlaylist = 'default'; // 現在のプレイリスト名
+    this.currentTrackIndex = -1; // 現在の曲のインデックス
+    this.isPlaying = false; // 再生中かどうか
+    this.isSeeking = false; // シークバーをドラッグ中かどうか
+    this.settings = { ...APP_CONFIG.defaultSettings }; // アプリ設定
+    this.dialogMode = 'create'; // ダイアログモード（create/rename）
+  }
 
-    importPlaylist(file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-            try {
-            const tracks = JSON.parse(e.target.result);
-            this.playlist = tracks.map(meta => ({
-                ...meta,
-                url: '',
-                file: null,
-                blob: null
-            }));
-            this.renderPlaylist();
-            this.showPlayer();
-            this.savePlaylistAuto();
-            } catch (err) {
-            this.showStatus('プレイリストファイルが不正です', 'error');
-            }
-        };
-        reader.readAsText(file);
-    }
+  /**
+   * プレイヤーの初期化
+   */
+  init() {
+    // 設定の読み込み
+    this.loadSettings();
+    
+    // プレイリストの読み込み
+    this.loadPlaylists();
+    
+    // 再生状態の復元
+    this.loadPlaybackState();
+    
+    // テーマ設定の適用
+    this.applyTheme();
+    
+    // イベントリスナーの設定
+    this.setupEventListeners();
+    
+    // プレイリストUIの更新
+    this.updatePlaylistUI();
+    
+    // ボリューム設定の適用
+    this.updateVolumeUI();
+    
+    // シャッフルとリピートモードのUIを更新
+    this.updateShuffleUI();
+    this.updateRepeatUI();
+    
+    console.log('MP3 Player initialized successfully');
+  }
 
-    }
+  /**
+   * イベントリスナーの設定
+   */
+  setupEventListeners() {
+    // オーディオ要素のイベント
+    this.audioElement.addEventListener('timeupdate', this.updateTimeDisplay.bind(this));
+    this.audioElement.addEventListener('loadedmetadata', this.onTrackLoaded.bind(this));
+    this.audioElement.addEventListener('ended', this.onTrackEnded.bind(this));
+    this.audioElement.addEventListener('error', this.handleAudioError.bind(this));
     
-    savePlaylistAuto() {
-        const playlistMeta = this.playlist.map(track => ({
-            title: track.title,
-            artist: track.artist,
-            duration: track.duration,
-            fileName: track.file ? track.file.name : null
-        }));
-        localStorage.setItem('mp3player_playlist', JSON.stringify(playlistMeta));
-    }
-
-    loadPlaylistAuto() {
-        const data = localStorage.getItem('mp3player_playlist');
-        return data ? JSON.parse(data) : [];
-    }
-
-    exportPlaylist(filename = 'playlist.json') {
-        const data = JSON.stringify(this.playlist.map(track => ({
-            title: track.title,
-            artist: track.artist,
-            duration: track.duration,
-            fileName: track.file ? track.file.name : null
-        })), null, 2);
-        const blob = new Blob([data], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    importPlaylist(file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-            try {
-            const tracks = JSON.parse(e.target.result);
-            this.playlist = tracks.map(meta => ({
-                ...meta,
-                url: '', // ファイル本体は再選択してもらう
-                file: null,
-                blob: null
-            }));
-            this.renderPlaylist();
-            this.showPlayer();
-            this.savePlaylistAuto();
-            } catch (err) {
-            this.showStatus('プレイリストファイルが不正です', 'error');
-            }
-    };
-
-    reader.readAsText(file);
-
-}
-
-    init() {
-        console.log('MP3Player initializing...');
-        this.bindEvents();
-        this.setupMediaSession();
-        this.setupKeyboardShortcuts();
-        this.initTheme();
-        this.updatePlaylistCount();
-        console.log('MP3Player initialized successfully');
-    }
+    // 再生コントロール
+    this.playBtn.addEventListener('click', this.togglePlayPause.bind(this));
+    this.prevBtn.addEventListener('click', this.playPreviousTrack.bind(this));
+    this.nextBtn.addEventListener('click', this.playNextTrack.bind(this));
+    this.shuffleBtn.addEventListener('click', this.toggleShuffle.bind(this));
+    this.repeatBtn.addEventListener('click', this.toggleRepeat.bind(this));
     
-    bindEvents() {
-        // ファイル選択
-        const selectBtn = document.getElementById('selectFilesBtn');
-        const fileInput = document.getElementById('audioFiles');
-        
-        if (selectBtn && fileInput) {
-            selectBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('Select files button clicked');
-                fileInput.click();
-            });
-            
-            fileInput.addEventListener('change', (e) => {
-                console.log('Files selected:', e.target.files.length);
-                if (e.target.files.length > 0) {
-                    this.handleFileSelection(e.target.files);
-                }
-            });
-        }
-        
-        // プレイヤーコントロール
-        this.bindPlayerControls();
-        
-        // テーマ関連
-        this.bindThemeControls();
-        
-        // プレイリスト関連
-        this.bindPlaylistControls();
-        
-        // オーディオイベント
-        this.bindAudioEvents();
-        
-        // ドラッグ&ドロップ
-        this.setupDragAndDrop();
-    }
+    // ボリュームコントロール
+    this.muteBtn.addEventListener('click', this.toggleMute.bind(this));
+    this.volumeSlider.addEventListener('input', this.changeVolume.bind(this));
     
-    bindPlayerControls() {
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const seekBar = document.getElementById('seekBar');
-        const volumeBar = document.getElementById('volumeBar');
-        const muteBtn = document.getElementById('muteBtn');
-        const shuffleBtn = document.getElementById('shuffleBtn');
-        const repeatBtn = document.getElementById('repeatBtn');
-        
-        if (playPauseBtn) {
-            playPauseBtn.addEventListener('click', () => this.togglePlayPause());
-        }
-        
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => this.previousTrack());
-        }
-        
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => this.nextTrack());
-        }
-        
-        if (seekBar) {
-            seekBar.addEventListener('input', (e) => this.seek(e.target.value));
-        }
-        
-        if (volumeBar) {
-            volumeBar.addEventListener('input', (e) => this.setVolume(e.target.value / 100));
-        }
-        
-        if (muteBtn) {
-            muteBtn.addEventListener('click', () => this.toggleMute());
-        }
-        
-        if (shuffleBtn) {
-            shuffleBtn.addEventListener('click', () => this.toggleShuffle());
-        }
-        
-        if (repeatBtn) {
-            repeatBtn.addEventListener('click', () => this.toggleRepeat());
-        }
-    }
+    // シークバー
+    this.seekBar.addEventListener('input', this.seeking.bind(this));
+    this.seekBar.addEventListener('change', this.seeked.bind(this));
     
-    bindThemeControls() {
-        const themeToggle = document.getElementById('themeToggle');
-        const themeSelect = document.getElementById('themeSelect');
-        
-        if (themeToggle) {
-            themeToggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('Theme toggle clicked');
-                this.toggleTheme();
-            });
-        }
-        
-        if (themeSelect) {
-            themeSelect.addEventListener('change', (e) => {
-                console.log('Theme select changed to:', e.target.value);
-                this.setTheme(e.target.value);
-            });
-        }
-    }
+    // ファイル入力
+    this.fileSelectBtn.addEventListener('click', () => {
+      console.log('File select button clicked');
+      this.fileInput.click();
+    });
     
-    bindPlaylistControls() {
-        const clearBtn = document.getElementById('clearPlaylistBtn');
-        const autoplayCheckbox = document.getElementById('autoplayNext');
-        
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearPlaylist());
-        }
-        
-        if (autoplayCheckbox) {
-            autoplayCheckbox.addEventListener('change', (e) => {
-                this.autoplayNext = e.target.checked;
-            });
-        }
-    }
+    this.fileInput.addEventListener('change', (e) => {
+      console.log('File input changed', e.target.files);
+      this.handleFileSelect(e);
+    });
     
-    bindAudioEvents() {
-        this.audio.addEventListener('loadedmetadata', () => {
-            this.updateDuration();
-        });
-        
-        this.audio.addEventListener('timeupdate', () => {
-            this.updateProgress();
-        });
-        
-        this.audio.addEventListener('ended', () => {
-            this.handleTrackEnd();
-        });
-        
-        this.audio.addEventListener('error', (e) => {
-            this.handleAudioError(e);
-        });
-        
-        this.audio.addEventListener('loadstart', () => {
-            this.showStatus('読み込み中...', 'info');
-        });
-        
-        this.audio.addEventListener('canplay', () => {
-            this.hideStatus();
-        });
-    }
+    // ドラッグ&ドロップ
+    this.setupDragAndDrop();
     
-    setupDragAndDrop() {
-        const fileSection = document.querySelector('.file-section');
-        
-        if (!fileSection) return;
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            fileSection.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-        
-        ['dragenter', 'dragover'].forEach(eventName => {
-            fileSection.addEventListener(eventName, () => {
-                fileSection.classList.add('dragover');
-            });
-        });
-        
-        ['dragleave', 'drop'].forEach(eventName => {
-            fileSection.addEventListener(eventName, () => {
-                fileSection.classList.remove('dragover');
-            });
-        });
-        
-        fileSection.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                this.handleFileSelection(files);
-            }
-        });
-    }
+    // プレイリスト選択
+    this.playlistSelect.addEventListener('change', this.switchPlaylist.bind(this));
     
-    handleFileSelection(files) {
-        console.log('Handling file selection:', files.length, 'files');
-        
-        const audioFiles = Array.from(files).filter(file => {
-            const isValidType = this.supportedTypes.some(type => file.type === type);
-            const isValidExtension = file.name.match(/\.(mp3|flac|wav|ogg|aac|m4a|opus|webm)$/i);
-            return isValidType || isValidExtension;
-        });
-        
-        console.log('Valid audio files:', audioFiles.length);
-        
-        if (audioFiles.length === 0) {
-            this.showStatus('対応していないファイル形式です', 'error');
-            return;
-        }
-        
-        const startIndex = this.playlist.length;
-        
-        audioFiles.forEach(file => {
-            this.addToPlaylist(file);
-        });
-        
-        this.showStatus(`${audioFiles.length}件のファイルを追加しました`, 'success');
-        this.showPlayer();
-        
-        // 最初のファイルを追加した場合は読み込む
-        if (startIndex === 0 && this.playlist.length > 0) {
-            this.loadTrack(0);
-        }
-    }
+    // プレイリスト管理
+    this.createPlaylistBtn.addEventListener('click', this.showCreatePlaylistDialog.bind(this));
+    this.renamePlaylistBtn.addEventListener('click', this.showRenamePlaylistDialog.bind(this));
+    this.deletePlaylistBtn.addEventListener('click', this.deleteCurrentPlaylist.bind(this));
+    this.exportPlaylistBtn.addEventListener('click', this.exportPlaylist.bind(this));
+    this.importPlaylistBtn.addEventListener('click', () => {
+      console.log('Import playlist button clicked');
+      this.importFileInput.click();
+    });
     
-    addToPlaylist(file) {
-        const url = URL.createObjectURL(file);
-        const track = {
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            artist: 'Unknown Artist',
-            url: url,
-            file: file,
-            duration: 0
-        };
-        
-        this.playlist.push(track);
-        this.renderPlaylist();
-        this.updatePlaylistCount();
-        this.savePlaylistAuto(); // ← ここを追加
-    }
+    this.importFileInput.addEventListener('change', (e) => {
+      console.log('Import file input changed', e.target.files);
+      this.importPlaylist(e);
+    });
     
-    updatePlaylistCount() {
-        const countEl = document.getElementById('playlistCount');
-        if (countEl) {
-            countEl.textContent = this.playlist.length;
-        }
-    }
+    // ダイアログ
+    this.dialogCancel.addEventListener('click', this.hideDialog.bind(this));
+    this.dialogConfirm.addEventListener('click', this.confirmDialog.bind(this));
     
-    renderPlaylist() {
-        const container = document.getElementById('playlistContainer');
-        if (!container) return;
-        
-        if (this.playlist.length === 0) {
-            container.innerHTML = '<div class="empty-state"><h3>プレイリストは空です</h3><p>音楽ファイルを追加してください</p></div>';
-            return;
-        }
-        
-        container.innerHTML = this.playlist.map((track, index) => `
-            <div class="playlist-item ${index === this.currentTrackIndex ? 'active' : ''}" data-index="${index}">
-                <div class="playlist-item__index">${index + 1}</div>
-                <div class="playlist-item__content">
-                    <div class="playlist-item__title">${this.escapeHtml(track.title)}</div>
-                    <div class="playlist-item__info">${this.escapeHtml(track.artist)} • ${this.formatTime(track.duration)}</div>
-                </div>
-                <div class="playlist-item__actions">
-                    <button class="playlist-item__remove" data-index="${index}" aria-label="削除" type="button">🗑️</button>
-                </div>
-            </div>
-        `).join('');
-        
-        // イベントリスナーを追加
-        container.querySelectorAll('.playlist-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('playlist-item__remove')) {
-                    const index = parseInt(item.dataset.index);
-                    this.loadTrack(index);
-                }
-            });
-        });
-        
-        container.querySelectorAll('.playlist-item__remove').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const index = parseInt(btn.dataset.index);
-                this.removeFromPlaylist(index);
-            });
-        });
-    }
-    
-    removeFromPlaylist(index) {
-        if (index === this.currentTrackIndex && this.isPlaying) {
-            this.pause();
-
-            this.renderPlaylist();
-            this.updatePlaylistCount();
-            this.savePlaylistAuto(); // ← ここを追加
-        }
-        
-        // URLを解放
-        URL.revokeObjectURL(this.playlist[index].url);
-        
-        this.playlist.splice(index, 1);
-        
-        if (index < this.currentTrackIndex) {
-            this.currentTrackIndex--;
-        } else if (index === this.currentTrackIndex) {
-            if (this.currentTrackIndex >= this.playlist.length) {
-                this.currentTrackIndex = Math.max(0, this.playlist.length - 1);
-            }
-            if (this.playlist.length > 0) {
-                this.loadTrack(this.currentTrackIndex);
-            } else {
-                this.hidePlayer();
-            }
-        }
-        
-        this.renderPlaylist();
-        this.updatePlaylistCount();
-        
-        if (this.playlist.length === 0) {
-            this.hidePlayer();
-        }
-    }
-    
-    clearPlaylist() {
-        if (this.isPlaying) {
-            this.pause();
-            this.hidePlayer();
-            this.showStatus('プレイリストをクリアしました', 'success');
-            this.savePlaylistAuto(); // ← ここを追加
-        }
-        
-        // 全URLを解放
-        this.playlist.forEach(track => URL.revokeObjectURL(track.url));
-        
-        this.playlist = [];
-        this.currentTrackIndex = 0;
-        this.renderPlaylist();
-        this.updatePlaylistCount();
-        this.hidePlayer();
-        this.showStatus('プレイリストをクリアしました', 'success');
-    }
-    
-    loadTrack(index) {
-        if (index < 0 || index >= this.playlist.length) return;
-        
-        this.currentTrackIndex = index;
-        const track = this.playlist[index];
-        
-        this.audio.src = track.url;
-        this.updateNowPlaying(track);
-        this.renderPlaylist();
-        this.updateMediaSession(track);
-    }
-    
-    updateNowPlaying(track) {
-        const titleEl = document.getElementById('trackTitle');
-        const artistEl = document.getElementById('trackArtist');
-        
-        if (titleEl) titleEl.textContent = track.title;
-        if (artistEl) artistEl.textContent = track.artist;
-    }
-    
-    async togglePlayPause() {
-        try {
-            if (this.isPlaying) {
-                this.pause();
-            } else {
-                await this.play();
-            }
-        } catch (error) {
-            this.handlePlayError(error);
-        }
-    }
-    
-    async play() {
-        if (this.playlist.length === 0) {
-            this.showStatus('プレイリストが空です', 'error');
-            return;
-        }
-        
-        try {
-            await this.audio.play();
-            this.isPlaying = true;
-            this.updatePlayButton();
-            this.updateMediaSession();
-        } catch (error) {
-            throw error;
-        }
-    }
-    
-    pause() {
-        this.audio.pause();
-        this.isPlaying = false;
-        this.updatePlayButton();
-        this.updateMediaSession();
-    }
-    
-    updatePlayButton() {
-        const btn = document.getElementById('playPauseBtn');
-        if (btn) {
-            btn.textContent = this.isPlaying ? '⏸️' : '▶️';
-            btn.setAttribute('aria-label', this.isPlaying ? '一時停止' : '再生');
-        }
-    }
-    
-    previousTrack() {
-        if (this.playlist.length === 0) return;
-        
-        let newIndex;
-        if (this.isShuffle) {
-            newIndex = Math.floor(Math.random() * this.playlist.length);
-        } else {
-            newIndex = this.currentTrackIndex - 1;
-            if (newIndex < 0) {
-                newIndex = this.playlist.length - 1;
-            }
-        }
-        
-        this.loadTrack(newIndex);
-        if (this.isPlaying) {
-            this.play();
-        }
-    }
-    
-    nextTrack() {
-        if (this.playlist.length === 0) return;
-        
-        let newIndex;
-        if (this.isShuffle) {
-            newIndex = Math.floor(Math.random() * this.playlist.length);
-        } else {
-            newIndex = this.currentTrackIndex + 1;
-            if (newIndex >= this.playlist.length) {
-                newIndex = 0;
-            }
-        }
-        
-        this.loadTrack(newIndex);
-        if (this.isPlaying) {
-            this.play();
-        }
-    }
-    
-    handleTrackEnd() {
-        if (this.repeatMode === 'one') {
-            this.audio.currentTime = 0;
-            this.play();
-        } else if (this.repeatMode === 'all' || this.autoplayNext) {
-            if (this.currentTrackIndex < this.playlist.length - 1 || this.repeatMode === 'all') {
-                this.nextTrack();
-            } else {
-                this.pause();
-            }
-        } else {
-            this.pause();
-        }
-    }
-    
-    seek(percent) {
-        const time = (percent / 100) * this.audio.duration;
-        if (!isNaN(time)) {
-            this.audio.currentTime = time;
-        }
-    }
-    
-    updateProgress() {
-        if (this.audio.duration) {
-            const percent = (this.audio.currentTime / this.audio.duration) * 100;
-            const seekBar = document.getElementById('seekBar');
-            const currentTime = document.getElementById('currentTime');
-            
-            if (seekBar) seekBar.value = percent;
-            if (currentTime) currentTime.textContent = this.formatTime(this.audio.currentTime);
-        }
-    }
-    
-    updateDuration() {
-        const duration = this.audio.duration;
-        const durationEl = document.getElementById('duration');
-        
-        if (durationEl) {
-            durationEl.textContent = this.formatTime(duration);
-        }
-        
-        // プレイリストの時間も更新
-        if (this.playlist[this.currentTrackIndex]) {
-            this.playlist[this.currentTrackIndex].duration = duration;
-            this.renderPlaylist();
-        }
-    }
-    
-    setVolume(volume) {
-        this.volume = Math.max(0, Math.min(1, volume));
-        this.audio.volume = this.isMuted ? 0 : this.volume;
-        
-        const volumeBar = document.getElementById('volumeBar');
-        if (volumeBar) {
-            volumeBar.value = this.volume * 100;
-        }
-        
-        this.updateVolumeButton();
-    }
-    
-    toggleMute() {
-        this.isMuted = !this.isMuted;
-        this.audio.volume = this.isMuted ? 0 : this.volume;
-        this.updateVolumeButton();
-    }
-    
-    updateVolumeButton() {
-        const btn = document.getElementById('muteBtn');
-        if (!btn) return;
-        
-        if (this.isMuted || this.volume === 0) {
-            btn.textContent = '🔇';
-            btn.setAttribute('aria-label', 'ミュート解除');
-        } else if (this.volume < 0.5) {
-            btn.textContent = '🔉';
-            btn.setAttribute('aria-label', 'ミュート');
-        } else {
-            btn.textContent = '🔊';
-            btn.setAttribute('aria-label', 'ミュート');
-        }
-    }
-    
-    toggleShuffle() {
-        this.isShuffle = !this.isShuffle;
-        const btn = document.getElementById('shuffleBtn');
-        if (btn) {
-            btn.classList.toggle('active', this.isShuffle);
-        }
-        this.showStatus(this.isShuffle ? 'シャッフル ON' : 'シャッフル OFF', 'success');
-    }
-    
-    toggleRepeat() {
-        const modes = ['none', 'one', 'all'];
-        const currentIndex = modes.indexOf(this.repeatMode);
-        this.repeatMode = modes[(currentIndex + 1) % modes.length];
-        
-        const btn = document.getElementById('repeatBtn');
-        if (btn) {
-            btn.classList.toggle('active', this.repeatMode !== 'none');
-        }
-        
-        const messages = {
-            'none': 'リピート OFF',
-            'one': '1曲リピート',
-            'all': '全曲リピート'
-        };
-        
-        this.showStatus(messages[this.repeatMode], 'success');
-    }
-    
-    // テーマ関連
-    initTheme() {
-        const savedTheme = this.theme;
-        this.setTheme(savedTheme);
-        const themeSelect = document.getElementById('themeSelect');
-        if (themeSelect) {
-            themeSelect.value = savedTheme;
-        }
-    }
-    
-    setTheme(theme) {
-        console.log('Setting theme to:', theme);
-        this.theme = theme;
-        
-        const themeSelect = document.getElementById('themeSelect');
-        if (themeSelect) {
-            themeSelect.value = theme;
-        }
-        
-        if (theme === 'auto') {
-            document.documentElement.removeAttribute('data-color-scheme');
-        } else {
-            document.documentElement.setAttribute('data-color-scheme', theme);
-        }
-    }
-    
-    toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-color-scheme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        console.log('Toggling theme from', currentTheme, 'to', newTheme);
-        this.setTheme(newTheme);
-    }
-    
-    // MediaSession API
-    setupMediaSession() {
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.setActionHandler('play', () => this.play());
-            navigator.mediaSession.setActionHandler('pause', () => this.pause());
-            navigator.mediaSession.setActionHandler('previoustrack', () => this.previousTrack());
-            navigator.mediaSession.setActionHandler('nexttrack', () => this.nextTrack());
-        }
-    }
-    
-    updateMediaSession(track) {
-        if ('mediaSession' in navigator && track) {
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: track.title,
-                artist: track.artist,
-                album: 'MP3プレイヤー'
-            });
-        }
-    }
+    // テーマ切り替え
+    this.themeToggle.addEventListener('click', this.toggleTheme.bind(this));
     
     // キーボードショートカット
-    setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-            
-            switch (e.code) {
-                case 'Space':
-                    e.preventDefault();
-                    this.togglePlayPause();
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    this.previousTrack();
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    this.nextTrack();
-                    break;
-                case 'ArrowUp':
-                    e.preventDefault();
-                    this.setVolume(Math.min(1, this.volume + 0.1));
-                    break;
-                case 'ArrowDown':
-                    e.preventDefault();
-                    this.setVolume(Math.max(0, this.volume - 0.1));
-                    break;
-                case 'KeyM':
-                    e.preventDefault();
-                    this.toggleMute();
-                    break;
-            }
+    document.addEventListener('keydown', this.handleKeyboardShortcuts.bind(this));
+  }
+
+  /**
+   * ドラッグ&ドロップの設定
+   */
+  setupDragAndDrop() {
+    const preventDefaults = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    
+    const highlight = () => {
+      this.dropArea.classList.add('drag-over');
+    };
+    
+    const unhighlight = () => {
+      this.dropArea.classList.remove('drag-over');
+    };
+    
+    const handleDrop = (e) => {
+      unhighlight();
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      this.processFiles(files);
+    };
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      this.dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+      this.dropArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+      this.dropArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    this.dropArea.addEventListener('drop', handleDrop, false);
+  }
+
+  /**
+   * ファイル選択ハンドラー
+   */
+  handleFileSelect(e) {
+    console.log('Handling file selection');
+    const files = e.target.files;
+    if (!files || files.length === 0) {
+      console.log('No files selected');
+      return;
+    }
+    
+    console.log(`Selected ${files.length} files`);
+    this.processFiles(files);
+    this.fileInput.value = ''; // 同じファイルを再度選択できるようにリセット
+  }
+
+  /**
+   * ファイルの処理
+   */
+  processFiles(files) {
+    if (!files || files.length === 0) {
+      console.log('No files to process');
+      return;
+    }
+    
+    console.log(`Processing ${files.length} files`);
+    
+    const audioFiles = Array.from(files).filter(file => {
+      const fileType = file.type;
+      const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+      const isSupported = APP_CONFIG.supportedFormats.includes(fileType) || 
+                         APP_CONFIG.fileExtensions.includes(fileExtension);
+      
+      console.log(`File: ${file.name}, Type: ${fileType}, Extension: ${fileExtension}, Supported: ${isSupported}`);
+      return isSupported;
+    });
+    
+    if (audioFiles.length === 0) {
+      alert('サポートされていないファイル形式です。MP3, FLAC, WAV, OGG, AAC, M4A, Opus, WebMファイルを選択してください。');
+      return;
+    }
+    
+    console.log(`Adding ${audioFiles.length} audio files to playlist`);
+    this.addTracksToPlaylist(audioFiles);
+  }
+
+  /**
+   * プレイリストにトラックを追加
+   */
+  addTracksToPlaylist(files) {
+    const tracks = Array.from(files).map(file => {
+      const fileName = file.name;
+      const fileNameParts = fileName.split('.');
+      fileNameParts.pop(); // 拡張子を削除
+      const title = fileNameParts.join('.');
+      
+      return {
+        id: this.generateUniqueId(),
+        title: title,
+        artist: 'Unknown Artist',
+        duration: 0,
+        file: file,
+        url: URL.createObjectURL(file)
+      };
+    });
+    
+    if (!this.playlists[this.currentPlaylist]) {
+      this.playlists[this.currentPlaylist] = [];
+    }
+    
+    this.playlists[this.currentPlaylist] = [...this.playlists[this.currentPlaylist], ...tracks];
+    
+    // プレイリストが空だった場合は最初の曲を選択
+    if (this.currentTrackIndex === -1 && this.playlists[this.currentPlaylist].length > 0) {
+      this.currentTrackIndex = 0;
+      this.loadTrack(0);
+    }
+    
+    this.updatePlaylistUI();
+    this.savePlaylists();
+  }
+
+  /**
+   * 一意のIDを生成
+   */
+  generateUniqueId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  }
+
+  /**
+   * プレイリストのUIを更新
+   */
+  updatePlaylistUI() {
+    // プレイリスト選択UIの更新
+    this.updatePlaylistSelectUI();
+    
+    // トラックリストの更新
+    this.updateTrackListUI();
+  }
+
+  /**
+   * プレイリスト選択UIの更新
+   */
+  updatePlaylistSelectUI() {
+    // プレイリスト選択肢をクリア
+    this.playlistSelect.innerHTML = '';
+    
+    // プレイリスト選択肢を追加
+    Object.keys(this.playlists).forEach(playlistName => {
+      const option = document.createElement('option');
+      option.value = playlistName;
+      option.textContent = playlistName;
+      option.selected = playlistName === this.currentPlaylist;
+      this.playlistSelect.appendChild(option);
+    });
+    
+    // プレイリストが存在しない場合はデフォルトを追加
+    if (Object.keys(this.playlists).length === 0) {
+      const option = document.createElement('option');
+      option.value = 'default';
+      option.textContent = 'デフォルトプレイリスト';
+      this.playlistSelect.appendChild(option);
+      this.playlists['default'] = [];
+      this.currentPlaylist = 'default';
+    }
+  }
+
+  /**
+   * トラックリストUIの更新
+   */
+  updateTrackListUI() {
+    // トラックリストをクリア
+    this.playlistItems.innerHTML = '';
+    
+    const tracks = this.playlists[this.currentPlaylist] || [];
+    
+    if (tracks.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.className = 'empty-playlist';
+      emptyItem.textContent = 'プレイリストは空です。ファイルを追加してください。';
+      this.playlistItems.appendChild(emptyItem);
+      return;
+    }
+    
+    // トラックをリストに追加
+    tracks.forEach((track, index) => {
+      const li = document.createElement('li');
+      li.className = 'track-item';
+      if (index === this.currentTrackIndex) {
+        li.classList.add('active');
+      }
+      
+      li.innerHTML = `
+        <div class="track-number">${index + 1}</div>
+        <div class="track-details">
+          <div class="track-title">${this.escapeHTML(track.title)}</div>
+          <div class="track-artist">${this.escapeHTML(track.artist)}</div>
+        </div>
+        <div class="track-duration">${this.formatTime(track.duration)}</div>
+        <button class="btn track-remove" aria-label="削除">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      `;
+      
+      // クリックイベントの追加
+      li.addEventListener('click', (e) => {
+        // 削除ボタンがクリックされた場合
+        if (e.target.closest('.track-remove')) {
+          e.stopPropagation();
+          this.removeTrack(index);
+          return;
+        }
+        
+        this.playTrack(index);
+      });
+      
+      this.playlistItems.appendChild(li);
+    });
+  }
+
+  /**
+   * HTMLのエスケープ処理
+   */
+  escapeHTML(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * プレイリストを切り替え
+   */
+  switchPlaylist() {
+    const selectedPlaylist = this.playlistSelect.value;
+    if (this.currentPlaylist === selectedPlaylist) return;
+    
+    console.log(`Switching from playlist "${this.currentPlaylist}" to "${selectedPlaylist}"`);
+    this.currentPlaylist = selectedPlaylist;
+    this.currentTrackIndex = -1;
+    
+    // プレイリストに曲がある場合は最初の曲をロード
+    if (this.playlists[this.currentPlaylist] && this.playlists[this.currentPlaylist].length > 0) {
+      this.currentTrackIndex = 0;
+      this.loadTrack(0);
+    } else {
+      // プレイリストが空の場合
+      this.resetPlayerDisplay();
+    }
+    
+    this.updatePlaylistUI();
+    this.saveCurrentPlaylist();
+  }
+
+  /**
+   * プレイヤーの表示をリセット
+   */
+  resetPlayerDisplay() {
+    console.log('Resetting player display');
+    this.currentTrackTitle.textContent = '選択された曲はありません';
+    this.currentTrackArtist.textContent = 'アーティスト情報';
+    this.seekBar.value = 0;
+    this.currentTimeDisplay.textContent = '0:00';
+    this.durationDisplay.textContent = '0:00';
+    this.audioElement.src = '';
+    this.isPlaying = false;
+    this.updatePlayPauseUI();
+  }
+
+  /**
+   * トラックを再生
+   */
+  playTrack(index) {
+    if (index < 0 || !this.playlists[this.currentPlaylist] || 
+        index >= this.playlists[this.currentPlaylist].length) {
+      console.log(`Invalid track index: ${index}`);
+      return;
+    }
+    
+    // 同じトラックの場合は再生/一時停止を切り替え
+    if (index === this.currentTrackIndex) {
+      console.log(`Toggle play/pause for track ${index}`);
+      this.togglePlayPause();
+      return;
+    }
+    
+    console.log(`Playing track ${index}`);
+    this.currentTrackIndex = index;
+    this.loadTrack(index);
+    this.playAudio();
+    this.updatePlaylistUI();
+  }
+
+  /**
+   * トラックをロード
+   */
+  loadTrack(index) {
+    if (index < 0 || !this.playlists[this.currentPlaylist] || 
+        index >= this.playlists[this.currentPlaylist].length) {
+      console.log(`Cannot load track at index ${index}`);
+      return;
+    }
+    
+    const track = this.playlists[this.currentPlaylist][index];
+    console.log(`Loading track: ${track.title}`);
+    
+    if (track.url) {
+      this.audioElement.src = track.url;
+      this.audioElement.load();
+    } else {
+      console.error('Track URL is missing');
+    }
+    
+    this.currentTrackTitle.textContent = track.title || 'Unknown Title';
+    this.currentTrackArtist.textContent = track.artist || 'Unknown Artist';
+    
+    this.savePlaybackState();
+  }
+
+  /**
+   * オーディオ再生
+   */
+  playAudio() {
+    if (!this.audioElement.src) {
+      console.log('No audio source to play');
+      return;
+    }
+    
+    console.log('Playing audio');
+    const playPromise = this.audioElement.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('Playback started successfully');
+          this.isPlaying = true;
+          this.updatePlayPauseUI();
+        })
+        .catch(error => {
+          console.error('Playback failed:', error);
+          this.isPlaying = false;
+          this.updatePlayPauseUI();
         });
     }
-    
-    // エラーハンドリング
-    handleAudioError(error) {
-        console.error('Audio error:', error);
-        this.showStatus('再生エラーが発生しました', 'error');
-        this.pause();
+  }
+
+  /**
+   * オーディオ一時停止
+   */
+  pauseAudio() {
+    console.log('Pausing audio');
+    this.audioElement.pause();
+    this.isPlaying = false;
+    this.updatePlayPauseUI();
+  }
+
+  /**
+   * 再生/一時停止の切り替え
+   */
+  togglePlayPause() {
+    console.log('Toggle play/pause');
+    if (this.isPlaying) {
+      this.pauseAudio();
+    } else {
+      // 何も選択されていない場合は最初のトラックを再生
+      if (this.currentTrackIndex === -1 && 
+          this.playlists[this.currentPlaylist] && 
+          this.playlists[this.currentPlaylist].length > 0) {
+        this.playTrack(0);
+      } else {
+        this.playAudio();
+      }
+    }
+  }
+
+  /**
+   * 再生/一時停止ボタンのUI更新
+   */
+  updatePlayPauseUI() {
+    if (this.isPlaying) {
+      this.playIcon.classList.add('hidden');
+      this.pauseIcon.classList.remove('hidden');
+    } else {
+      this.playIcon.classList.remove('hidden');
+      this.pauseIcon.classList.add('hidden');
+    }
+  }
+
+  /**
+   * 前のトラックを再生
+   */
+  playPreviousTrack() {
+    console.log('Play previous track');
+    if (!this.playlists[this.currentPlaylist] || this.playlists[this.currentPlaylist].length === 0) {
+      return;
     }
     
-    handlePlayError(error) {
-        if (error.name === 'NotAllowedError') {
-            this.showStatus('ブラウザの自動再生ポリシーにより再生できません。手動で再生してください。', 'error');
+    // 現在の曲の再生時間が3秒以上なら最初から再生
+    if (this.audioElement.currentTime > 3) {
+      console.log('Current time > 3s, restarting track');
+      this.audioElement.currentTime = 0;
+      return;
+    }
+    
+    let prevIndex;
+    if (this.settings.shuffle) {
+      // シャッフルモードの場合はランダムに選択
+      prevIndex = Math.floor(Math.random() * this.playlists[this.currentPlaylist].length);
+      console.log(`Shuffle mode: selected random track ${prevIndex}`);
+    } else {
+      // 通常モードの場合は前の曲
+      prevIndex = this.currentTrackIndex - 1;
+      if (prevIndex < 0) {
+        prevIndex = this.playlists[this.currentPlaylist].length - 1;
+      }
+      console.log(`Normal mode: selected previous track ${prevIndex}`);
+    }
+    
+    this.playTrack(prevIndex);
+  }
+
+  /**
+   * 次のトラックを再生
+   */
+  playNextTrack() {
+    console.log('Play next track');
+    if (!this.playlists[this.currentPlaylist] || this.playlists[this.currentPlaylist].length === 0) {
+      return;
+    }
+    
+    let nextIndex;
+    if (this.settings.shuffle) {
+      // シャッフルモードの場合はランダムに選択
+      nextIndex = Math.floor(Math.random() * this.playlists[this.currentPlaylist].length);
+      console.log(`Shuffle mode: selected random track ${nextIndex}`);
+    } else {
+      // 通常モードの場合は次の曲
+      nextIndex = this.currentTrackIndex + 1;
+      if (nextIndex >= this.playlists[this.currentPlaylist].length) {
+        nextIndex = 0;
+      }
+      console.log(`Normal mode: selected next track ${nextIndex}`);
+    }
+    
+    this.playTrack(nextIndex);
+  }
+
+  /**
+   * トラック終了時の処理
+   */
+  onTrackEnded() {
+    console.log('Track ended');
+    switch (this.settings.repeatMode) {
+      case 'one':
+        // 1曲リピート
+        console.log('Repeat mode: one - replaying current track');
+        this.audioElement.currentTime = 0;
+        this.playAudio();
+        break;
+      case 'all':
+        // 全曲リピート
+        console.log('Repeat mode: all - playing next track');
+        this.playNextTrack();
+        break;
+      case 'none':
+        // リピートなし
+        if (this.currentTrackIndex < this.playlists[this.currentPlaylist].length - 1) {
+          console.log('Repeat mode: none - playing next track');
+          this.playNextTrack();
         } else {
-            this.showStatus('再生エラーが発生しました', 'error');
+          // プレイリストの最後の曲の場合
+          console.log('Repeat mode: none - reached end of playlist');
+          this.isPlaying = false;
+          this.updatePlayPauseUI();
         }
-        console.error('Play error:', error);
+        break;
+    }
+  }
+
+  /**
+   * トラックロード時の処理
+   */
+  onTrackLoaded() {
+    console.log('Track loaded');
+    // 曲の長さを更新
+    const duration = this.audioElement.duration || 0;
+    this.durationDisplay.textContent = this.formatTime(duration);
+    this.seekBar.max = duration;
+    
+    // トラックの長さを保存
+    if (this.playlists[this.currentPlaylist] && this.playlists[this.currentPlaylist][this.currentTrackIndex]) {
+      this.playlists[this.currentPlaylist][this.currentTrackIndex].duration = duration;
+      this.updatePlaylistUI();
+      this.savePlaylists();
+    }
+  }
+
+  /**
+   * オーディオエラーハンドラー
+   */
+  handleAudioError(e) {
+    console.error('Audio playback error:', e);
+    alert(`音声の再生中にエラーが発生しました: ${e.message || 'Unknown error'}`);
+    
+    // 次の曲に進む
+    if (this.settings.autoplayNext) {
+      this.playNextTrack();
+    }
+  }
+
+  /**
+   * 時間表示の更新
+   */
+  updateTimeDisplay() {
+    if (this.isSeeking) return;
+    
+    const currentTime = this.audioElement.currentTime || 0;
+    const duration = this.audioElement.duration || 0;
+    
+    this.currentTimeDisplay.textContent = this.formatTime(currentTime);
+    this.seekBar.value = currentTime;
+    
+    // 再生状態を保存（毎秒保存すると重いので10秒ごとに保存）
+    if (Math.floor(currentTime) % 10 === 0) {
+      this.savePlaybackState();
+    }
+  }
+
+  /**
+   * シーク中の処理
+   */
+  seeking() {
+    this.isSeeking = true;
+    this.currentTimeDisplay.textContent = this.formatTime(parseFloat(this.seekBar.value));
+  }
+
+  /**
+   * シーク完了時の処理
+   */
+  seeked() {
+    this.audioElement.currentTime = parseFloat(this.seekBar.value);
+    this.isSeeking = false;
+  }
+
+  /**
+   * 時間を「分:秒」形式にフォーマット
+   */
+  formatTime(seconds) {
+    if (isNaN(seconds) || seconds === Infinity) return '0:00';
+    
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${min}:${sec}`;
+  }
+
+  /**
+   * ボリューム変更
+   */
+  changeVolume() {
+    const volume = parseFloat(this.volumeSlider.value);
+    console.log(`Changing volume to ${volume}`);
+    this.audioElement.volume = volume;
+    this.settings.volume = volume;
+    this.updateVolumeUI();
+    this.saveSettings();
+  }
+
+  /**
+   * ボリュームUIの更新
+   */
+  updateVolumeUI() {
+    // ミュート状態の更新
+    if (this.audioElement.volume === 0 || this.audioElement.muted) {
+      this.volumeIcon.classList.add('hidden');
+      this.muteIcon.classList.remove('hidden');
+    } else {
+      this.volumeIcon.classList.remove('hidden');
+      this.muteIcon.classList.add('hidden');
     }
     
-    // UI ヘルパー
-    showPlayer() {
-        const playerSection = document.getElementById('playerSection');
-        const playlistSection = document.getElementById('playlistSection');
-        
-        if (playerSection) playerSection.classList.remove('hidden');
-        if (playlistSection) playlistSection.classList.remove('hidden');
+    // ボリュームスライダーの更新
+    this.volumeSlider.value = this.audioElement.volume;
+  }
+
+  /**
+   * ミュートの切り替え
+   */
+  toggleMute() {
+    console.log(`Toggling mute: ${!this.audioElement.muted}`);
+    this.audioElement.muted = !this.audioElement.muted;
+    this.updateVolumeUI();
+  }
+
+  /**
+   * シャッフルの切り替え
+   */
+  toggleShuffle() {
+    console.log(`Toggling shuffle: ${!this.settings.shuffle}`);
+    this.settings.shuffle = !this.settings.shuffle;
+    this.updateShuffleUI();
+    this.saveSettings();
+  }
+
+  /**
+   * シャッフルUIの更新
+   */
+  updateShuffleUI() {
+    if (this.settings.shuffle) {
+      this.shuffleBtn.classList.add('active');
+    } else {
+      this.shuffleBtn.classList.remove('active');
+    }
+  }
+
+  /**
+   * リピートモードの切り替え
+   */
+  toggleRepeat() {
+    const currentMode = this.settings.repeatMode;
+    let newMode;
+    
+    switch (currentMode) {
+      case 'none':
+        newMode = 'all';
+        break;
+      case 'all':
+        newMode = 'one';
+        break;
+      case 'one':
+        newMode = 'none';
+        break;
+      default:
+        newMode = 'none';
     }
     
-    hidePlayer() {
-        const playerSection = document.getElementById('playerSection');
-        const playlistSection = document.getElementById('playlistSection');
-        
-        if (playerSection) playerSection.classList.add('hidden');
-        if (playlistSection) playlistSection.classList.add('hidden');
+    console.log(`Changing repeat mode from ${currentMode} to ${newMode}`);
+    this.settings.repeatMode = newMode;
+    this.updateRepeatUI();
+    this.saveSettings();
+  }
+
+  /**
+   * リピートUIの更新
+   */
+  updateRepeatUI() {
+    this.repeatBtn.classList.remove('active');
+    this.repeatBtn.removeAttribute('data-repeat-one');
+    
+    if (this.settings.repeatMode === 'all') {
+      this.repeatBtn.classList.add('active');
+    } else if (this.settings.repeatMode === 'one') {
+      this.repeatBtn.classList.add('active');
+      this.repeatBtn.setAttribute('data-repeat-one', 'true');
+    }
+  }
+
+  /**
+   * トラックの削除
+   */
+  removeTrack(index) {
+    if (!this.playlists[this.currentPlaylist]) return;
+    
+    console.log(`Removing track at index ${index}`);
+    
+    // URLの解放
+    if (this.playlists[this.currentPlaylist][index].url) {
+      URL.revokeObjectURL(this.playlists[this.currentPlaylist][index].url);
     }
     
-    showStatus(message, type = 'info') {
-        const statusEl = document.getElementById('statusMessage');
-        if (!statusEl) return;
-        
-        statusEl.textContent = message;
-        statusEl.className = `status-message ${type}`;
-        statusEl.classList.remove('hidden');
-        
-        setTimeout(() => {
-            this.hideStatus();
-        }, 3000);
+    // トラックの削除
+    this.playlists[this.currentPlaylist].splice(index, 1);
+    
+    // 現在再生中のトラックが削除された場合
+    if (index === this.currentTrackIndex) {
+      // プレイリストが空になった場合
+      if (this.playlists[this.currentPlaylist].length === 0) {
+        console.log('Playlist is now empty');
+        this.currentTrackIndex = -1;
+        this.resetPlayerDisplay();
+      } else {
+        // 他のトラックがある場合は次のトラックを再生
+        const newIndex = index < this.playlists[this.currentPlaylist].length ? index : 0;
+        console.log(`Playing next available track at index ${newIndex}`);
+        this.currentTrackIndex = newIndex;
+        this.loadTrack(newIndex);
+        this.playAudio();
+      }
+    } else if (index < this.currentTrackIndex) {
+      // 現在のトラックより前のトラックが削除された場合はインデックスを調整
+      console.log(`Adjusting currentTrackIndex from ${this.currentTrackIndex} to ${this.currentTrackIndex - 1}`);
+      this.currentTrackIndex--;
     }
     
-    hideStatus() {
-        const statusEl = document.getElementById('statusMessage');
-        if (statusEl) {
-            statusEl.classList.add('hidden');
+    this.updatePlaylistUI();
+    this.savePlaylists();
+  }
+
+  /**
+   * 新規プレイリスト作成ダイアログを表示
+   */
+  showCreatePlaylistDialog() {
+    console.log('Showing create playlist dialog');
+    this.dialogMode = 'create';
+    this.dialogTitle.textContent = '新規プレイリスト作成';
+    this.playlistNameInput.value = '';
+    this.showDialog();
+  }
+
+  /**
+   * プレイリスト名変更ダイアログを表示
+   */
+  showRenamePlaylistDialog() {
+    console.log('Showing rename playlist dialog');
+    this.dialogMode = 'rename';
+    this.dialogTitle.textContent = 'プレイリスト名変更';
+    this.playlistNameInput.value = this.currentPlaylist;
+    this.showDialog();
+  }
+
+  /**
+   * ダイアログを表示
+   */
+  showDialog() {
+    this.playlistDialog.classList.remove('hidden');
+    this.playlistNameInput.focus();
+  }
+
+  /**
+   * ダイアログを非表示
+   */
+  hideDialog() {
+    console.log('Hiding dialog');
+    this.playlistDialog.classList.add('hidden');
+  }
+
+  /**
+   * ダイアログの確認
+   */
+  confirmDialog() {
+    const name = this.playlistNameInput.value.trim();
+    
+    if (!name) {
+      alert('プレイリスト名を入力してください');
+      return;
+    }
+    
+    console.log(`Confirming dialog in mode: ${this.dialogMode}, name: ${name}`);
+    
+    if (this.dialogMode === 'create') {
+      this.createPlaylist(name);
+    } else if (this.dialogMode === 'rename') {
+      this.renamePlaylist(name);
+    }
+    
+    this.hideDialog();
+  }
+
+  /**
+   * プレイリストの作成
+   */
+  createPlaylist(name) {
+    if (this.playlists[name]) {
+      alert(`プレイリスト "${name}" は既に存在します`);
+      return;
+    }
+    
+    console.log(`Creating new playlist: ${name}`);
+    this.playlists[name] = [];
+    this.currentPlaylist = name;
+    this.currentTrackIndex = -1;
+    
+    this.updatePlaylistUI();
+    this.resetPlayerDisplay();
+    this.savePlaylists();
+    this.saveCurrentPlaylist();
+  }
+
+  /**
+   * プレイリスト名の変更
+   */
+  renamePlaylist(newName) {
+    if (this.currentPlaylist === newName) return;
+    
+    if (this.playlists[newName]) {
+      alert(`プレイリスト "${newName}" は既に存在します`);
+      return;
+    }
+    
+    console.log(`Renaming playlist from "${this.currentPlaylist}" to "${newName}"`);
+    
+    // プレイリストのリネーム
+    this.playlists[newName] = [...this.playlists[this.currentPlaylist]];
+    delete this.playlists[this.currentPlaylist];
+    this.currentPlaylist = newName;
+    
+    this.updatePlaylistUI();
+    this.savePlaylists();
+    this.saveCurrentPlaylist();
+  }
+
+  /**
+   * 現在のプレイリストの削除
+   */
+  deleteCurrentPlaylist() {
+    if (Object.keys(this.playlists).length <= 1) {
+      alert('最後のプレイリストは削除できません');
+      return;
+    }
+    
+    if (!confirm(`プレイリスト "${this.currentPlaylist}" を削除しますか？`)) {
+      return;
+    }
+    
+    console.log(`Deleting playlist: ${this.currentPlaylist}`);
+    
+    // URLの解放
+    if (this.playlists[this.currentPlaylist]) {
+      this.playlists[this.currentPlaylist].forEach(track => {
+        if (track.url) {
+          URL.revokeObjectURL(track.url);
         }
+      });
     }
     
-    formatTime(seconds) {
-        if (!seconds || isNaN(seconds)) return '0:00';
+    // プレイリストの削除
+    delete this.playlists[this.currentPlaylist];
+    
+    // 他のプレイリストを選択
+    const newPlaylist = Object.keys(this.playlists)[0];
+    console.log(`Switching to playlist: ${newPlaylist}`);
+    this.currentPlaylist = newPlaylist;
+    this.currentTrackIndex = -1;
+    
+    // プレイリストに曲がある場合は最初の曲をロード
+    if (this.playlists[this.currentPlaylist] && this.playlists[this.currentPlaylist].length > 0) {
+      this.currentTrackIndex = 0;
+      this.loadTrack(0);
+    } else {
+      this.resetPlayerDisplay();
+    }
+    
+    this.updatePlaylistUI();
+    this.savePlaylists();
+    this.saveCurrentPlaylist();
+  }
+
+  /**
+   * プレイリストのエクスポート
+   */
+  exportPlaylist() {
+    if (!this.playlists[this.currentPlaylist] || this.playlists[this.currentPlaylist].length === 0) {
+      alert('エクスポートするトラックがありません');
+      return;
+    }
+    
+    console.log(`Exporting playlist: ${this.currentPlaylist}`);
+    
+    // エクスポートデータの作成
+    const exportData = {
+      name: this.currentPlaylist,
+      tracks: this.playlists[this.currentPlaylist].map(track => ({
+        title: track.title,
+        artist: track.artist,
+        duration: track.duration
+      }))
+    };
+    
+    const jsonData = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    // ダウンロードリンクの作成
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${this.currentPlaylist}.json`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    
+    // クリーンアップ
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+
+  /**
+   * プレイリストのインポート
+   */
+  importPlaylist(e) {
+    const file = e.target.files[0];
+    if (!file) {
+      console.log('No file selected for import');
+      return;
+    }
+    
+    console.log(`Importing playlist from file: ${file.name}`);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
         
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
+        if (!data.name || !Array.isArray(data.tracks)) {
+          throw new Error('Invalid playlist format');
+        }
+        
+        let playlistName = data.name;
+        let counter = 1;
+        
+        // 同名のプレイリストが存在する場合は名前を変更
+        while (this.playlists[playlistName]) {
+          playlistName = `${data.name} (${counter})`;
+          counter++;
+        }
+        
+        console.log(`Creating imported playlist: ${playlistName}`);
+        
+        // プレイリストの作成
+        this.playlists[playlistName] = data.tracks.map(track => ({
+          id: this.generateUniqueId(),
+          title: track.title || 'Unknown Title',
+          artist: track.artist || 'Unknown Artist',
+          duration: track.duration || 0
+        }));
+        
+        this.currentPlaylist = playlistName;
+        this.currentTrackIndex = -1;
+        
+        this.updatePlaylistUI();
+        this.resetPlayerDisplay();
+        this.savePlaylists();
+        this.saveCurrentPlaylist();
+        
+        alert(`プレイリスト "${playlistName}" をインポートしました`);
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('プレイリストのインポートに失敗しました');
+      }
+    };
+    
+    reader.readAsText(file);
+    this.importFileInput.value = '';
+  }
+
+  /**
+   * テーマの切り替え
+   */
+  toggleTheme() {
+    const body = document.body;
+    
+    console.log(`Current theme: ${this.settings.theme}`);
+    
+    if (this.settings.theme === 'dark') {
+      this.settings.theme = 'light';
+      body.setAttribute('data-color-scheme', 'light');
+    } else if (this.settings.theme === 'light') {
+      this.settings.theme = 'auto';
+      body.removeAttribute('data-color-scheme');
+    } else {
+      this.settings.theme = 'dark';
+      body.setAttribute('data-color-scheme', 'dark');
     }
     
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    console.log(`New theme: ${this.settings.theme}`);
+    this.saveSettings();
+  }
+
+  /**
+   * テーマの適用
+   */
+  applyTheme() {
+    const body = document.body;
+    
+    console.log(`Applying theme: ${this.settings.theme}`);
+    
+    if (this.settings.theme === 'dark') {
+      body.setAttribute('data-color-scheme', 'dark');
+    } else if (this.settings.theme === 'light') {
+      body.setAttribute('data-color-scheme', 'light');
+    } else {
+      body.removeAttribute('data-color-scheme');
     }
-}
+  }
 
-// アプリケーション初期化
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM Content Loaded - Initializing MP3Player');
-    window.player = new MP3Player();
-});
+  /**
+   * キーボードショートカットのハンドラー
+   */
+  handleKeyboardShortcuts(e) {
+    // フォーム要素にフォーカスがある場合はショートカットを無効化
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+      return;
+    }
+    
+    switch (e.key) {
+      case ' ': // スペースキー
+        e.preventDefault();
+        this.togglePlayPause();
+        break;
+      case 'ArrowLeft': // 左矢印
+        if (e.ctrlKey) {
+          e.preventDefault();
+          this.playPreviousTrack();
+        }
+        break;
+      case 'ArrowRight': // 右矢印
+        if (e.ctrlKey) {
+          e.preventDefault();
+          this.playNextTrack();
+        }
+        break;
+      case 'ArrowUp': // 上矢印
+        if (e.ctrlKey) {
+          e.preventDefault();
+          this.volumeSlider.value = Math.min(1, parseFloat(this.volumeSlider.value) + 0.1);
+          this.changeVolume();
+        }
+        break;
+      case 'ArrowDown': // 下矢印
+        if (e.ctrlKey) {
+          e.preventDefault();
+          this.volumeSlider.value = Math.max(0, parseFloat(this.volumeSlider.value) - 0.1);
+          this.changeVolume();
+        }
+        break;
+      case 'm': // M
+      case 'M':
+        e.preventDefault();
+        this.toggleMute();
+        break;
+      case 's': // S
+      case 'S':
+        e.preventDefault();
+        this.toggleShuffle();
+        break;
+      case 'r': // R
+      case 'R':
+        e.preventDefault();
+        this.toggleRepeat();
+        break;
+    }
+  }
 
-// Service Worker の登録
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
+  /**
+   * 設定の保存
+   */
+  saveSettings() {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js');
-      console.log('ServiceWorker registration successful:', registration.scope);
-    } catch (error) {
-      console.error('ServiceWorker registration failed:', error);
+      console.log('Saving settings to localStorage');
+      localStorage.setItem(APP_CONFIG.storageKeys.settings, JSON.stringify(this.settings));
+    } catch (e) {
+      console.error('Failed to save settings:', e);
     }
-  });
+  }
+
+  /**
+   * 設定の読み込み
+   */
+  loadSettings() {
+    try {
+      console.log('Loading settings from localStorage');
+      const savedSettings = localStorage.getItem(APP_CONFIG.storageKeys.settings);
+      if (savedSettings) {
+        this.settings = { ...APP_CONFIG.defaultSettings, ...JSON.parse(savedSettings) };
+        console.log('Settings loaded:', this.settings);
+      } else {
+        console.log('No saved settings found, using defaults');
+      }
+      
+      // ボリュームの設定
+      this.audioElement.volume = this.settings.volume;
+      this.volumeSlider.value = this.settings.volume;
+    } catch (e) {
+      console.error('Failed to load settings:', e);
+      this.settings = { ...APP_CONFIG.defaultSettings };
+    }
+  }
+
+  /**
+   * プレイリストの保存
+   */
+  savePlaylists() {
+    try {
+      console.log('Saving playlists to localStorage');
+      // URL を除外してプレイリストを保存（ファイルオブジェクトは保存できないため）
+      const playlistsToSave = {};
+      
+      Object.keys(this.playlists).forEach(name => {
+        playlistsToSave[name] = this.playlists[name].map(track => ({
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          duration: track.duration
+        }));
+      });
+      
+      localStorage.setItem(APP_CONFIG.storageKeys.playlists, JSON.stringify(playlistsToSave));
+    } catch (e) {
+      console.error('Failed to save playlists:', e);
+    }
+  }
+
+  /**
+   * プレイリストの読み込み
+   */
+  loadPlaylists() {
+    try {
+      console.log('Loading playlists from localStorage');
+      const savedPlaylists = localStorage.getItem(APP_CONFIG.storageKeys.playlists);
+      if (savedPlaylists) {
+        this.playlists = JSON.parse(savedPlaylists);
+        console.log(`Loaded ${Object.keys(this.playlists).length} playlists`);
+      } else {
+        console.log('No saved playlists found, creating default playlist');
+      }
+      
+      // プレイリストが空の場合はデフォルトを作成
+      if (Object.keys(this.playlists).length === 0) {
+        this.playlists = { 'default': [] };
+      }
+      
+      // 現在のプレイリストを読み込み
+      const savedCurrentPlaylist = localStorage.getItem(APP_CONFIG.storageKeys.currentPlaylist);
+      if (savedCurrentPlaylist && this.playlists[savedCurrentPlaylist]) {
+        this.currentPlaylist = savedCurrentPlaylist;
+        console.log(`Loaded current playlist: ${this.currentPlaylist}`);
+      } else {
+        this.currentPlaylist = Object.keys(this.playlists)[0];
+        console.log(`Using first available playlist: ${this.currentPlaylist}`);
+      }
+    } catch (e) {
+      console.error('Failed to load playlists:', e);
+      this.playlists = { 'default': [] };
+      this.currentPlaylist = 'default';
+    }
+  }
+
+  /**
+   * 現在のプレイリストを保存
+   */
+  saveCurrentPlaylist() {
+    try {
+      console.log(`Saving current playlist: ${this.currentPlaylist}`);
+      localStorage.setItem(APP_CONFIG.storageKeys.currentPlaylist, this.currentPlaylist);
+    } catch (e) {
+      console.error('Failed to save current playlist:', e);
+    }
+  }
+
+  /**
+   * 再生状態の保存
+   */
+  savePlaybackState() {
+    try {
+      const state = {
+        currentPlaylist: this.currentPlaylist,
+        currentTrackIndex: this.currentTrackIndex,
+        currentTime: this.audioElement.currentTime,
+        isPlaying: this.isPlaying
+      };
+      
+      localStorage.setItem(APP_CONFIG.storageKeys.playbackState, JSON.stringify(state));
+    } catch (e) {
+      console.error('Failed to save playback state:', e);
+    }
+  }
+
+  /**
+   * 再生状態の読み込み
+   */
+  loadPlaybackState() {
+    try {
+      console.log('Loading playback state from localStorage');
+      const savedState = localStorage.getItem(APP_CONFIG.storageKeys.playbackState);
+      if (!savedState) {
+        console.log('No saved playback state found');
+        return;
+      }
+      
+      const state = JSON.parse(savedState);
+      console.log('Playback state loaded:', state);
+      
+      // プレイリストの確認
+      if (state.currentPlaylist && this.playlists[state.currentPlaylist]) {
+        this.currentPlaylist = state.currentPlaylist;
+        console.log(`Restored playlist: ${this.currentPlaylist}`);
+      } else {
+        console.log(`Saved playlist "${state.currentPlaylist}" not found`);
+      }
+      
+      // トラックの確認
+      if (state.currentTrackIndex >= 0 && 
+          this.playlists[this.currentPlaylist] && 
+          state.currentTrackIndex < this.playlists[this.currentPlaylist].length) {
+        this.currentTrackIndex = state.currentTrackIndex;
+        console.log(`Restored track index: ${this.currentTrackIndex}`);
+        
+        // ここではトラックのロードのみ行い、再生は行わない
+        // これはユーザーアクションなしの自動再生を避けるため
+        this.loadTrack(this.currentTrackIndex);
+        
+        // 再生位置の復元
+        if (state.currentTime) {
+          this.audioElement.currentTime = state.currentTime;
+          console.log(`Restored playback position: ${this.formatTime(state.currentTime)}`);
+        }
+      } else {
+        console.log('No valid track to restore');
+      }
+    } catch (e) {
+      console.error('Failed to load playback state:', e);
+    }
+  }
 }
+
+// DOMがロードされたらプレイヤーを初期化
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM Content Loaded, initializing player');
+  window.player = new MP3Player();
+});
